@@ -36,6 +36,15 @@ func ConnectDB(uri, dbName string) *mongo.Database {
 	return DB
 }
 
-func GetUsersCollection() *mongo.Collection {
-	return DB.Collection("users")
+func GetCollection(table string) (*mongo.Collection, context.Context) {
+	collection := DB.Collection(table)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+	// Ensure the context gets canceled when no longer needed
+	go func() {
+		<-ctx.Done()
+		cancel()
+	}()
+
+	return collection, ctx
 }

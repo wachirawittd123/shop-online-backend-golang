@@ -1,7 +1,7 @@
 package authController
 
 import (
-	"context"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -25,10 +25,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	// Check if user exists
-	collection := common.GetUsersCollection()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	collection, ctx := common.GetCollection("users")
 
 	var user models.User
 	err := collection.FindOne(ctx, bson.M{"email": loginData.Email}).Decode(&user)
@@ -45,6 +42,7 @@ func Login(c *gin.Context) {
 
 	// Generate JWT token
 	token, err := common.GenerateToken(user.ID.Hex(), user.Role)
+	log.Println(token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return

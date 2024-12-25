@@ -12,5 +12,6 @@ func RegisterUserRoutes(router *gin.Engine) {
 	{
 		userGroup.GET("/", common.AuthMiddleware("admin"), userController.GetUsers)
 		userGroup.POST("/", common.AuthMiddleware("admin"), userController.AddUser)
+		userGroup.DELETE("/:id", common.AuthMiddleware("admin"), userController.RemoveUser)
 	}
 }

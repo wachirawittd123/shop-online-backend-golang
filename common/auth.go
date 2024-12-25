@@ -1,8 +1,6 @@
 package common
 
 import (
-	"context"
-	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -11,11 +9,8 @@ import (
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 )
-
-var jwtSecret = []byte("MAZINO")
 
 // HashPassword hashes a plain-text password with a salt
 func HashPassword(password string) (string, error) {
@@ -55,12 +50,14 @@ func GenerateToken(userID string, role string) (string, error) {
 	// Create the token with claims
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
+	var jwtSecret = []byte(AppConfig.JWTSecret)
 	// Sign the token with the secret
 	return token.SignedString(jwtSecret)
 }
 
 // ValidateToken validates the JWT token and returns the claims if valid
 func ValidateToken(tokenString string) (*Claims, error) {
+	var jwtSecret = []byte(AppConfig.JWTSecret)
 	// Parse the token
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return jwtSecret, nil
@@ -112,16 +109,14 @@ func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
 			return
 		}
 
-		objectID, err := primitive.ObjectIDFromHex(claims.UserID)
+		objectID, err := ConvertIDMongodb(claims.UserID, c)
+
 		if err != nil {
-			log.Println("Invalid UserID format:", claims.UserID)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid UserID"})
+			// The error and response are already handled in ConvertIDMongodb
 			return
 		}
 
-		collection := GetUsersCollection()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		collection, ctx := GetCollection("users")
 
 		var user struct {
 			Token string `bson:"token"`

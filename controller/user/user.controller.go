@@ -13,22 +13,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-var user struct {
-	ID        primitive.ObjectID `bson:"_id,omitempty"`
-	Name      string             `bson:"name"`
-	Email     string             `bson:"email"`
-	Password  string             `bson:"password"`
-	Role      string             `bson:"role"`
-	Token     string             `bson:"token"`
-	CreatedAt primitive.DateTime `bson:"created_at"`
-}
-
 func GetUsers(c *gin.Context) {
 	search := c.Query("search")
 	startDate := c.Query("startDate")
 	endDate := c.Query("endDate")
 
-	collection := common.GetUsersCollection()
+	collection, ctx := common.GetCollection("users")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -95,10 +85,7 @@ func AddUser(c *gin.Context) {
 		return
 	}
 
-	// Check if email already exists
-	collection := common.GetUsersCollection()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	collection, ctx := common.GetCollection("users")
 
 	// Set role with validation
 	errRole := user.SetRole(user.Role)
@@ -134,4 +121,34 @@ func AddUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "User added successfully"})
+}
+
+func RemoveUser(c *gin.Context) {
+	// Get the user ID from the request
+	_id := c.Param("id")
+
+	// Convert the ID to ObjectID
+	objectID, err := common.ConvertIDMongodb(_id, c)
+
+	if err != nil {
+		return
+	}
+
+	collection, ctx := common.GetCollection("users")
+
+	// Perform the deletion
+	result, err := collection.DeleteOne(ctx, bson.M{"_id": objectID})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
+		return
+	}
+
+	// Check if a user was deleted
+	if result.DeletedCount == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	// Return success response
+	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }

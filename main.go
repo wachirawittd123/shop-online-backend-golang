@@ -11,8 +11,9 @@ import (
 )
 
 func main() {
+	common.LoadConfig()
 	// Connect to the database
-	db := common.ConnectDB("mongodb://localhost:27017", "shop-online")
+	db := common.ConnectDB(common.AppConfig.MongoURI, "shop-online")
 
 	// Example: Use `db` to access collections
 	log.Println("Database initialized:", db.Name())
@@ -30,5 +31,5 @@ func main() {
 	})
 
 	// Start the server
-	r.Run(":8080")
+	r.Run(":" + common.AppConfig.PORT + "")
 }
