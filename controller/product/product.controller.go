@@ -1,32 +1,15 @@
 package productController
 
 import (
-	"context"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wachirawittd123/shop-online-backend-golang/common"
-	models "github.com/wachirawittd123/shop-online-backend-golang/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 )
-
-func GetProductById(id string, collection *mongo.Collection, ctx context.Context, c *gin.Context) models.Product {
-	var existingProduct = models.Product{}
-	objectID, err := primitive.ObjectIDFromHex(id)
-	if err != nil {
-		return existingProduct
-	}
-	err = collection.FindOne(ctx, bson.M{"_id": objectID}).Decode(&existingProduct)
-	if err != nil {
-		// Product not found
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID format"})
-		return existingProduct
-	}
-	return existingProduct
-}
 
 func GetProducts(c *gin.Context) {
 	search := c.Query("search")
@@ -35,12 +18,11 @@ func GetProducts(c *gin.Context) {
 
 	collection, ctx := common.GetCollection("products")
 
+	// Build filters for the aggregation pipeline
 	filter := bson.M{}
 	if search != "" {
-		filter = bson.M{
-			"$or": []bson.M{
-				{"name": bson.M{"$regex": search, "$options": "i"}},
-			},
+		filter["$or"] = []bson.M{
+			{"name": bson.M{"$regex": search, "$options": "i"}},
 		}
 	}
 
@@ -61,24 +43,49 @@ func GetProducts(c *gin.Context) {
 		filter["created_at"] = dateFilter
 	}
 
-	cursor, err := collection.Find(ctx, filter)
+	// Define the aggregation pipeline
+	pipeline := []bson.M{
+		{"$match": filter}, // Apply the filters
+		{
+			"$lookup": bson.M{
+				"from":         "product_category", // The collection to join
+				"localField":   "id_category",      // Field in the "products" collection
+				"foreignField": "_id",              // Field in the "product_category" collection
+				"as":           "category_details", // Output array field
+			},
+		},
+		{
+			"$unwind": bson.M{
+				"path":                       "$category_details", // Unwind the joined array
+				"preserveNullAndEmptyArrays": false,               // Exclude products with no category match
+			},
+		},
+	}
+
+	// Execute the aggregation pipeline
+	cursor, err := collection.Aggregate(ctx, pipeline)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch products"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to fetch products", "status_code": http.StatusInternalServerError})
 		return
 	}
 	defer cursor.Close(ctx)
 
-	var products []models.Product
-	if err := cursor.All(ctx, &products); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to decode products"})
+	// Decode the result into a slice of maps (for dynamic fields)
+	var results []bson.M
+	if err := cursor.All(ctx, &results); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to decode products", "status_code": http.StatusInternalServerError})
 		return
 	}
 
-	if products == nil {
-		products = []models.Product{}
+	log.Println("results product=========>")
+	log.Println(results)
+
+	if results == nil {
+		results = []bson.M{}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"products": products})
+	// Respond with the joined data
+	c.JSON(http.StatusOK, gin.H{"products": results, "status_code": http.StatusOK})
 }
 
 func GetProduct(c *gin.Context) {
@@ -88,104 +95,90 @@ func GetProduct(c *gin.Context) {
 
 	product := GetProductById(_id, collection, ctx, c)
 
-	c.JSON(http.StatusOK, gin.H{"product": product})
+	c.JSON(http.StatusOK, gin.H{"product": product, "status_code": http.StatusOK})
 }
 
 func AddProduct(c *gin.Context) {
-	var product models.Product
-
-	if err := c.ShouldBindJSON(&product); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// Parse and validate request body
+	var requestBody AddProductRequest
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		common.RespondWithError(c, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
-	collection, ctx := common.GetCollection("products")
-
-	var existingProduct models.Product
-	err := collection.FindOne(ctx, bson.M{"name": product.Name}).Decode(&existingProduct)
-	if err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Product name already in use"})
-		return
-	}
-
-	var dateNow = primitive.NewDateTimeFromTime(time.Now())
-	product.ID = primitive.NewObjectID()
-	product.CreatedAt = dateNow
-	product.UpdatedOn = dateNow
-
-	_, err = collection.InsertOne(ctx, product)
+	// Validate category ID
+	idCategory, err := common.ConvertIDMongodb(requestBody.IDCategory, c)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add product"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Product added successfully"})
+	// Check if product name already exists
+	if isProductNameTaken(requestBody.Name, c) {
+		return
+	}
+
+	// Prepare the product for insertion
+	product := prepareProductForInsertion(requestBody, idCategory)
+
+	// Insert the product into the database
+	if err := insertProduct(product, c); err != nil {
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Product added successfully", "status_code": http.StatusOK})
 }
 
 func UpdateProduct(c *gin.Context) {
-	_id := c.Param("id")
-
-	objectID, err := primitive.ObjectIDFromHex(_id)
+	// Parse and validate the product ID
+	objectID, err := common.ConvertIDMongodb(c.Param("id"), c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID format"})
 		return
 	}
 
-	var requestBody struct {
-		Name   string `json:"name" binding:"required"`
-		Price  int    `json:"price" binding:"required"`
-		Detail string `json:"detail"`
-	}
-
+	// Parse and validate the request body
+	var requestBody AddProductRequest
 	if err := c.ShouldBindJSON(&requestBody); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		common.RespondWithError(c, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
-	collection, ctx := common.GetCollection("products")
-	update := bson.M{"$set": bson.M{
-		"name":       requestBody.Name,
-		"price":      requestBody.Price,
-		"detail":     requestBody.Detail,
-		"updated_on": primitive.NewDateTimeFromTime(time.Now()),
-	}}
-
-	result, err := collection.UpdateOne(ctx, bson.M{"_id": objectID}, update)
+	// Convert category ID to ObjectID
+	idCategory, err := primitive.ObjectIDFromHex(requestBody.IDCategory)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update product name"})
+		common.RespondWithError(c, http.StatusBadRequest, "Invalid category ID format", err)
 		return
 	}
 
-	if result.ModifiedCount == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
+	// Prepare the update document
+	update := bson.M{
+		"$set": bson.M{
+			"name":        requestBody.Name,
+			"price":       requestBody.Price,
+			"detail":      requestBody.Detail,
+			"id_category": idCategory,
+			"updated_on":  primitive.NewDateTimeFromTime(time.Now()),
+		},
+	}
+
+	// Perform the update operation
+	if err := common.UpdateOneCommonInDB(objectID, update, c, "products"); err != nil {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Product updated successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Product updated successfully", "status_code": http.StatusOK})
 }
 
 func RemoveProduct(c *gin.Context) {
-	_id := c.Param("id")
-
-	objectID, err := common.ConvertIDMongodb(_id, c)
-
+	// Parse and validate the product ID
+	objectID, err := common.ConvertIDMongodb(c.Param("id"), c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid product ID format"})
 		return
 	}
 
-	collection, ctx := common.GetCollection("products")
-
-	result, err := collection.DeleteOne(ctx, bson.M{"_id": objectID})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete product"})
+	// Attempt to delete the product
+	if err := common.DeleteOneCommonByID(objectID, c, "products"); err != nil {
 		return
 	}
 
-	if result.DeletedCount == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Product deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Product deleted successfully", "status_code": http.StatusOK})
 }

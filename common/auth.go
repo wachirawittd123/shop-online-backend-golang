@@ -80,7 +80,7 @@ func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		// Get the token from the Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Authorization header is required", "status_code": http.StatusUnauthorized})
 			c.Abort()
 			return
 		}
@@ -88,14 +88,14 @@ func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		// Extract the token
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		if tokenString == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token is required"})
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Token is required", "status_code": http.StatusUnauthorized})
 			c.Abort()
 			return
 		}
 
 		// Check if the token is blacklisted
 		if IsBlacklisted(tokenString) {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token has been invalidated"})
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Token has been invalidated", "status_code": http.StatusUnauthorized})
 			c.Abort()
 			return
 		}
@@ -104,7 +104,7 @@ func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		claims, err := ValidateToken(tokenString)
 
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid or expired token", "status_code": http.StatusUnauthorized})
 			c.Abort()
 			return
 		}
@@ -112,7 +112,7 @@ func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		objectID, err := ConvertIDMongodb(claims.UserID, c)
 
 		if err != nil {
-			// The error and response are already handled in ConvertIDMongodb
+			// The message and response are already handled in ConvertIDMongodb
 			return
 		}
 
@@ -125,7 +125,7 @@ func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		err = collection.FindOne(ctx, bson.M{"_id": objectID}).Decode(&user)
 
 		if err != nil || user.Token != tokenString {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Invalid or expired token", "status_code": http.StatusUnauthorized})
 			c.Abort()
 			return
 		}
@@ -139,7 +139,7 @@ func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
 		}
 
 		if !allowed {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Your role does not have access."})
+			c.JSON(http.StatusUnauthorized, gin.H{"message": "Your role does not have access.", "status_code": http.StatusUnauthorized})
 			c.Abort()
 			return
 		}

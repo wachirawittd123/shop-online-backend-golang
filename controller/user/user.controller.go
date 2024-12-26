@@ -1,8 +1,6 @@
 package userController
 
 import (
-	"context"
-	"log"
 	"net/http"
 	"time"
 
@@ -19,8 +17,6 @@ func GetUsers(c *gin.Context) {
 	endDate := c.Query("endDate")
 
 	collection, ctx := common.GetCollection("users")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
 	filter := bson.M{}
 	if search != "" {
@@ -50,8 +46,6 @@ func GetUsers(c *gin.Context) {
 	if len(dateFilter) > 0 {
 		filter["created_at"] = dateFilter
 	}
-	log.Println("filter===========>")
-	log.Println(filter)
 
 	// Find all users
 	cursor, err := collection.Find(ctx, filter)
@@ -72,33 +66,26 @@ func GetUsers(c *gin.Context) {
 		users = []models.User{}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"users": users})
+	c.JSON(http.StatusOK, gin.H{"users": users, "status_code": http.StatusOK})
 }
 
 // AddUser adds a new user to the database
 func AddUser(c *gin.Context) {
 	var user models.User
 
-	// Bind JSON to the User struct
+	// Parse and validate the request body
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		common.RespondWithError(c, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
-	collection, ctx := common.GetCollection("users")
-
-	// Set role with validation
-	errRole := user.SetRole(user.Role)
-	if errRole != "" {
-		c.JSON(http.StatusConflict, gin.H{"error": errRole})
+	// Validate and set the role
+	if err := validateUserRole(&user, c); err != nil {
 		return
 	}
 
-	var existingUser models.User
-	err := collection.FindOne(ctx, bson.M{"email": user.Email}).Decode(&existingUser)
-	if err == nil {
-		// Email already exists
-		c.JSON(http.StatusConflict, gin.H{"error": "Email already in use"})
+	// Check if the email already exists
+	if isEmailInUse(user.Email, c) {
 		return
 	}
 
@@ -107,89 +94,50 @@ func AddUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
+
 	user.Password = hashedPassword
 
-	// Set additional fields
-	user.ID = primitive.NewObjectID()
-	user.CreatedAt = primitive.NewDateTimeFromTime(time.Now())
-
-	// Insert the user into the database
-	_, err = collection.InsertOne(ctx, user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to add user"})
+	// Set additional fields and insert the user
+	if err := insertUser(user, c); err != nil {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User added successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "User added successfully", "status_code": http.StatusOK})
 }
 
 func RemoveUser(c *gin.Context) {
-	// Get the user ID from the request
-	_id := c.Param("id")
-
-	// Convert the ID to ObjectID
-	objectID, err := common.ConvertIDMongodb(_id, c)
-
+	objectID, err := common.ConvertIDMongodb(c.Param("id"), c)
 	if err != nil {
 		return
 	}
 
-	collection, ctx := common.GetCollection("users")
-
-	// Perform the deletion
-	result, err := collection.DeleteOne(ctx, bson.M{"_id": objectID})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
+	if err := common.DeleteOneCommonByID(objectID, c, "users"); err != nil {
 		return
 	}
 
-	// Check if a user was deleted
-	if result.DeletedCount == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	}
-
-	// Return success response
-	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully", "status_code": http.StatusOK})
 }
 
 // UpdateUserName updates the name of a user by their ID
 func UpdateUser(c *gin.Context) {
-	// Get the user ID from the URL parameter
-	_id := c.Param("id")
-
-	// Parse the user ID as a MongoDB ObjectID
-	objectID, err := primitive.ObjectIDFromHex(_id)
+	objectID, err := common.ConvertIDMongodb(c.Param("id"), c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID format"})
 		return
 	}
 
-	// Parse the request body to get the new name
-	var requestBody struct {
-		Name string `json:"name" binding:"required"`
-	}
+	var requestBody RequestUpdateBody
 	if err := c.ShouldBindJSON(&requestBody); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		common.RespondWithError(c, http.StatusBadRequest, "Invalid request body", err)
 		return
 	}
 
-	collection, ctx := common.GetCollection("users")
+	update := bson.M{"$set": bson.M{
+		"name": requestBody.Name,
+	}}
 
-	// Perform the update
-	update := bson.M{"$set": bson.M{"name": requestBody.Name}}
-	result, err := collection.UpdateOne(ctx, bson.M{"_id": objectID}, update)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user name"})
+	if err := common.UpdateOneCommonInDB(objectID, update, c, "users"); err != nil {
 		return
 	}
 
-	// Check if a user was actually updated
-	if result.ModifiedCount == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-		return
-	}
-
-	// Respond with success
-	c.JSON(http.StatusOK, gin.H{"message": "User name updated successfully"})
+	c.JSON(http.StatusOK, gin.H{"message": "Product category updated successfully", "status_code": http.StatusOK})
 }

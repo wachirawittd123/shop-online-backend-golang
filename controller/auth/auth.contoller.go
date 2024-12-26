@@ -30,13 +30,13 @@ func Login(c *gin.Context) {
 	var user models.User
 	err := collection.FindOne(ctx, bson.M{"email": loginData.Email}).Decode(&user)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+		common.RespondWithError(c, http.StatusUnauthorized, "Invalid email or password", err)
 		return
 	}
 
 	// Validate password
 	if !common.ComparePasswords(user.Password, loginData.Password) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
+		common.RespondWithError(c, http.StatusUnauthorized, "Invalid password", err)
 		return
 	}
 
@@ -44,17 +44,17 @@ func Login(c *gin.Context) {
 	token, err := common.GenerateToken(user.ID.Hex(), user.Role)
 	log.Println(token)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		common.RespondWithError(c, http.StatusInternalServerError, "Failed to generate token", err)
 		return
 	}
 
 	_, err = collection.UpdateOne(ctx, bson.M{"_id": user.ID}, bson.M{"$set": bson.M{"token": token}})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update token version"})
+		common.RespondWithError(c, http.StatusInternalServerError, "Failed to update token version", err)
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	c.JSON(http.StatusOK, gin.H{"user": user, "token": token, "status_code": http.StatusOK})
 }
 
 func Logout(c *gin.Context) {
@@ -83,5 +83,5 @@ func Logout(c *gin.Context) {
 	expirationTime := time.Unix(claims.ExpiresAt, 0)
 	common.AddToBlacklist(tokenString, expirationTime)
 
-	c.JSON(http.StatusOK, gin.H{"message": "Successfully logged out"})
+	c.JSON(http.StatusOK, gin.H{"message": "Successfully logged out", "status_code": http.StatusOK})
 }
