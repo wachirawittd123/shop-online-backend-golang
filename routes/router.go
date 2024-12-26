@@ -3,6 +3,7 @@ package routes
 import (
 	"github.com/gin-gonic/gin"
 	authRouter "github.com/wachirawittd123/shop-online-backend-golang/routes/auth"
+	productRouter "github.com/wachirawittd123/shop-online-backend-golang/routes/product"
 	userRouter "github.com/wachirawittd123/shop-online-backend-golang/routes/user"
 )
 
@@ -11,4 +12,5 @@ func RegisterRoutes(router *gin.Engine) {
 	// Add other route groups here
 	userRouter.RegisterUserRoutes(router)
 	authRouter.RegisterAuthRoutes(router)
+	productRouter.RegisterProductRoutes(router)
 }

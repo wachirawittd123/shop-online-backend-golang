@@ -152,3 +152,44 @@ func RemoveUser(c *gin.Context) {
 	// Return success response
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }
+
+// UpdateUserName updates the name of a user by their ID
+func UpdateUser(c *gin.Context) {
+	// Get the user ID from the URL parameter
+	_id := c.Param("id")
+
+	// Parse the user ID as a MongoDB ObjectID
+	objectID, err := primitive.ObjectIDFromHex(_id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID format"})
+		return
+	}
+
+	// Parse the request body to get the new name
+	var requestBody struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	collection, ctx := common.GetCollection("users")
+
+	// Perform the update
+	update := bson.M{"$set": bson.M{"name": requestBody.Name}}
+	result, err := collection.UpdateOne(ctx, bson.M{"_id": objectID}, update)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user name"})
+		return
+	}
+
+	// Check if a user was actually updated
+	if result.ModifiedCount == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	// Respond with success
+	c.JSON(http.StatusOK, gin.H{"message": "User name updated successfully"})
+}

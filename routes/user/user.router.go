@@ -12,6 +12,7 @@ func RegisterUserRoutes(router *gin.Engine) {
 	{
 		userGroup.GET("/", common.AuthMiddleware("admin"), userController.GetUsers)
 		userGroup.POST("/", common.AuthMiddleware("admin"), userController.AddUser)
+		userGroup.PUT("/:id", common.AuthMiddleware("user", "admin"), userController.UpdateUser)
 		userGroup.DELETE("/:id", common.AuthMiddleware("admin"), userController.RemoveUser)
 	}
 }

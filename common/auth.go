@@ -129,20 +129,19 @@ func AuthMiddleware(allowedRoles ...string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
-
 		// Check if the user's role is allowed
+		allowed := false
 		for _, role := range allowedRoles {
 			if claims.Role == role {
-				// Attach claims to the context
-				c.Set("userID", claims.UserID)
-				c.Set("role", claims.Role)
-				c.Next()
-				return
-			} else {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "Your role does not have access."})
-				c.Abort()
-				return
+				allowed = true
+				break
 			}
+		}
+
+		if !allowed {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Your role does not have access."})
+			c.Abort()
+			return
 		}
 
 		// Attach claims to the context
