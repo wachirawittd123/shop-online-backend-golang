@@ -10,8 +10,8 @@ import (
 func RegisterCartRoutes(router *gin.Engine) {
 	cartGroup := router.Group("/cart")
 	{
-		cartGroup.GET("/", common.AuthMiddleware("user", "admin"), cartController.GetCartWithProducts)
-		cartGroup.GET("/:id", common.AuthMiddleware("user", "admin"), cartController.GetCartWithProducts)
+		cartGroup.GET("/", common.AuthMiddleware("user", "admin"), cartController.GetCart)
+		cartGroup.GET("/:id", common.AuthMiddleware("user", "admin"), cartController.GetCart)
 		cartGroup.PUT("/", common.AuthMiddleware("user", "admin"), cartController.UpdateCart)
 	}
 }

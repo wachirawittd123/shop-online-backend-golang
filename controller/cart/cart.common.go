@@ -145,7 +145,7 @@ func updateCart(cartID string, requestBody RequestUpdateCart, cartItems []models
 }
 
 // createCart creates a new cart in the database
-func createCart(userID primitive.ObjectID, requestBody RequestUpdateCart, cartItems []models.CartItem, c *gin.Context) error {
+func createCart(userID primitive.ObjectID, requestBody RequestUpdateCart, cartItems []models.CartItem) error {
 	newCart := models.Cart{
 		ID:        primitive.NewObjectID(),
 		UserID:    userID,

@@ -8,7 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-func GetCartWithProducts(c *gin.Context) {
+func GetCart(c *gin.Context) {
 	// Parse and validate the cart ID
 	cardId := c.Param("id")
 	search := c.Query("search")
@@ -45,11 +45,11 @@ func GetCartWithProducts(c *gin.Context) {
 	}
 
 	if len(cardId) > 0 {
-		c.JSON(http.StatusOK, gin.H{"cart": cartWithProducts[0], "status_code": 200})
+		c.JSON(http.StatusOK, gin.H{"cart": cartWithProducts[0], "status_code": http.StatusOK})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"cart": cartWithProducts, "status_code": 200})
+	c.JSON(http.StatusOK, gin.H{"cart": cartWithProducts, "status_code": http.StatusOK})
 }
 
 func UpdateCart(c *gin.Context) {
@@ -85,7 +85,7 @@ func UpdateCart(c *gin.Context) {
 	if newIdCart != "" {
 		err = updateCart(newIdCart, requestBody, cartItems, c)
 	} else {
-		err = createCart(userID, requestBody, cartItems, c)
+		err = createCart(userID, requestBody, cartItems)
 	}
 
 	if err != nil {
