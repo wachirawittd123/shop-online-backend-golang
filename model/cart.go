@@ -14,8 +14,9 @@ type Cart struct {
 	Total    float64            `bson:"total"`     // Final total after discounts and taxes
 	// Discount  float64            `bson:"discount"`   // Total discount applied to the cart
 	// Tax       float64            `bson:"tax"`        // Total tax applied to the cart
-	CreatedAt primitive.DateTime `bson:"created_at"` // Timestamp when the cart was created
-	UpdatedOn primitive.DateTime `bson:"updated_on"` // Timestamp when the cart was last updated
+	DeliveryFee float64            `bson:"delivery_fee"` // Cost of delivery
+	CreatedAt   primitive.DateTime `bson:"created_at"`   // Timestamp when the cart was created
+	UpdatedOn   primitive.DateTime `bson:"updated_on"`   // Timestamp when the cart was last updated
 }
 
 // CartItem represents an individual item in the shopping cart

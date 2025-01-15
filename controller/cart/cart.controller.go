@@ -5,7 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/wachirawittd123/shop-online-backend-golang/common"
+	deliveryController "github.com/wachirawittd123/shop-online-backend-golang/controller/delivery"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func GetCart(c *gin.Context) {
@@ -68,11 +70,7 @@ func UpdateCart(c *gin.Context) {
 	}
 
 	// Determine the cart ID to use (new or existing)
-	newIdCart, err := getCartID(userID, requestBody.ID)
-	if err != nil {
-		common.RespondWithError(c, http.StatusInternalServerError, "Failed to retrieve cart", err)
-		return
-	}
+	newIdCart := getCartID(userID, requestBody.ID)
 
 	// Map requestBody.Items to cart items with valid MongoDB ObjectIDs
 	cartItems, err := mapRequestItemsToCartItems(requestBody.Items)
@@ -81,16 +79,36 @@ func UpdateCart(c *gin.Context) {
 		return
 	}
 
+	var newObjectID primitive.ObjectID
 	// Handle update or create logic
 	if newIdCart != "" {
-		err = updateCart(newIdCart, requestBody, cartItems, c)
+		err, id := updateCart(newIdCart, requestBody, cartItems, c)
+		if err != nil {
+			common.RespondWithError(c, http.StatusInternalServerError, "Failed to update cart", err)
+			return
+		}
+		newObjectID = id
 	} else {
-		err = createCart(userID, requestBody, cartItems)
+		requestBody.Status = "active"
+		err, id := createCart(userID, requestBody, cartItems)
+		if err != nil {
+			common.RespondWithError(c, http.StatusInternalServerError, "Failed to create cart", err)
+			return
+		}
+		newObjectID = id
 	}
 
-	if err != nil {
-		common.RespondWithError(c, http.StatusInternalServerError, "Failed to update or create cart", err)
-		return
+	if requestBody.Status == "completed" {
+		deliveryRequest := deliveryController.RequestCreateDelivery{
+			OrderID:     newObjectID,             // Ensure correct type
+			UserID:      userID,                  // User ID
+			DeliveryFee: requestBody.DeliveryFee, // Delivery fee from request body
+		}
+		status := deliveryController.AddDelivery(deliveryRequest)
+		if status == 400 {
+			common.RespondWithError(c, http.StatusInternalServerError, "Failed to add delivery", err)
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Cart updated successfully", "status_code": http.StatusOK})

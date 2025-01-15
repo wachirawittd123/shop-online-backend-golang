@@ -1,6 +1,7 @@
 package common
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -32,15 +33,16 @@ func UpdateOneCommonInDB(objectID primitive.ObjectID, update bson.M, c *gin.Cont
 	defer ctx.Done()
 
 	result, err := collection.UpdateOne(ctx, bson.M{"_id": objectID}, update)
+	log.Println("result=========>", result)
 	if err != nil {
-		RespondWithError(c, http.StatusInternalServerError, "Failed to update product", err)
+		RespondWithError(c, http.StatusInternalServerError, "Failed to update", err)
 		return err
 	}
 
-	if result.ModifiedCount == 0 {
-		RespondWithError(c, http.StatusNotFound, "Product not found", nil)
-		return err
-	}
+	// if result.ModifiedCount == 0 {
+	// 	RespondWithError(c, http.StatusNotFound, "Item not found", nil)
+	// 	return err
+	// }
 
 	return nil
 }

@@ -60,6 +60,7 @@ func pilineQuery(baseMatch bson.D, search string) mongo.Pipeline {
 			{Key: "status", Value: bson.D{{Key: "$first", Value: "$status"}}},
 			{Key: "sub_total", Value: bson.D{{Key: "$first", Value: "$sub_total"}}},
 			{Key: "total", Value: bson.D{{Key: "$first", Value: "$total"}}},
+			{Key: "delivery_fee", Value: bson.D{{Key: "$first", Value: "$delivery_fee"}}},
 			{Key: "created_at", Value: bson.D{{Key: "$first", Value: "$created_at"}}},
 			{Key: "updated_on", Value: bson.D{{Key: "$first", Value: "$updated_on"}}},
 			{Key: "items", Value: bson.D{{Key: "$push", Value: bson.D{
@@ -110,54 +111,58 @@ func getUserIDFromContext(c *gin.Context) (primitive.ObjectID, error) {
 }
 
 // getCartID retrieves the cart ID from the request or the active cart for the user
-func getCartID(userID primitive.ObjectID, requestCartID string) (string, error) {
+func getCartID(userID primitive.ObjectID, requestCartID string) string {
 	collection, ctx := common.GetCollection("carts")
 	defer ctx.Done()
 
 	var existingCart models.Cart
-	err := collection.FindOne(ctx, bson.M{"user_id": userID, "status": "active"}).Decode(&existingCart)
+	collection.FindOne(ctx, bson.M{"user_id": userID, "status": "active"}).Decode(&existingCart)
 
 	if requestCartID != "" {
-		return requestCartID, nil
+		return requestCartID
 	} else if existingCart.ID.Hex() != "000000000000000000000000" {
-		return existingCart.ID.Hex(), nil
+		return existingCart.ID.Hex()
 	}
-	return "", err
+	return ""
 }
 
 // updateCart updates an existing cart in the database
-func updateCart(cartID string, requestBody RequestUpdateCart, cartItems []models.CartItem, c *gin.Context) error {
+func updateCart(cartID string, requestBody RequestUpdateCart, cartItems []models.CartItem, c *gin.Context) (error, primitive.ObjectID) {
 	objectID, err := common.ConvertIDMongodb(cartID, c)
 	if err != nil {
-		return err
+		return err, objectID
 	}
 
 	update := bson.M{
 		"$set": bson.M{
-			"total":      requestBody.Total,
-			"sub_total":  requestBody.SubTotal,
-			"items":      cartItems,
-			"updated_on": primitive.NewDateTimeFromTime(time.Now()),
+			"status":       requestBody.Status,
+			"total":        requestBody.Total,
+			"sub_total":    requestBody.SubTotal,
+			"delivery_fee": requestBody.DeliveryFee,
+			"items":        cartItems,
+			"updated_on":   primitive.NewDateTimeFromTime(time.Now()),
 		},
 	}
 
-	return common.UpdateOneCommonInDB(objectID, update, c, "carts")
+	return common.UpdateOneCommonInDB(objectID, update, c, "carts"), objectID
 }
 
 // createCart creates a new cart in the database
-func createCart(userID primitive.ObjectID, requestBody RequestUpdateCart, cartItems []models.CartItem) error {
+func createCart(userID primitive.ObjectID, requestBody RequestUpdateCart, cartItems []models.CartItem) (error, primitive.ObjectID) {
+	id := primitive.NewObjectID()
 	newCart := models.Cart{
-		ID:        primitive.NewObjectID(),
-		UserID:    userID,
-		Status:    "active",
-		Total:     requestBody.Total,
-		SubTotal:  requestBody.SubTotal,
-		Items:     cartItems,
-		CreatedAt: primitive.NewDateTimeFromTime(time.Now()),
-		UpdatedOn: primitive.NewDateTimeFromTime(time.Now()),
+		ID:          id,
+		UserID:      userID,
+		Status:      requestBody.Status,
+		Total:       requestBody.Total,
+		SubTotal:    requestBody.SubTotal,
+		DeliveryFee: requestBody.DeliveryFee,
+		Items:       cartItems,
+		CreatedAt:   primitive.NewDateTimeFromTime(time.Now()),
+		UpdatedOn:   primitive.NewDateTimeFromTime(time.Now()),
 	}
 
-	return insertCart(newCart)
+	return insertCart(newCart), id
 }
 
 // mapRequestItemsToCartItems maps request items to cart items with valid MongoDB ObjectIDs

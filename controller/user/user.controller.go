@@ -133,11 +133,21 @@ func UpdateUser(c *gin.Context) {
 
 	update := bson.M{"$set": bson.M{
 		"name": requestBody.Name,
+		"shipping_address": bson.M{
+			"phone":       requestBody.ShippingAddr.Phone,
+			"street":      requestBody.ShippingAddr.Street,
+			"city":        requestBody.ShippingAddr.City,
+			"state":       requestBody.ShippingAddr.State,
+			"postal_code": requestBody.ShippingAddr.PostalCode,
+			"country":     requestBody.ShippingAddr.Country,
+			"latitude":    requestBody.ShippingAddr.Latitude, // Example latitude
+			"longitude":   requestBody.ShippingAddr.Longitude,
+		},
 	}}
 
 	if err := common.UpdateOneCommonInDB(objectID, update, c, "users"); err != nil {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Product category updated successfully", "status_code": http.StatusOK})
+	c.JSON(http.StatusOK, gin.H{"message": "User successfully", "status_code": http.StatusOK})
 }

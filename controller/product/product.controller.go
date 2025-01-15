@@ -1,7 +1,6 @@
 package productController
 
 import (
-	"log"
 	"net/http"
 	"time"
 
@@ -76,9 +75,6 @@ func GetProducts(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": "Failed to decode products", "status_code": http.StatusInternalServerError})
 		return
 	}
-
-	log.Println("results product=========>")
-	log.Println(results)
 
 	if results == nil {
 		results = []bson.M{}
